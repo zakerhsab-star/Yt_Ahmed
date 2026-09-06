@@ -14,11 +14,9 @@ from telegram.ext import (
 import yt_dlp
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-# Render يوفر هذا المتغير تلقائياً، أو يستخدم الرابط المحلي عند التجربة
 BASE_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:8080").rstrip("/")
 DOWNLOAD_DIR = "downloads"
 
-# مسار تقديم الملفات الكبيرة برابط مباشر
 async def download_file_handler(request):
     filename = request.match_info.get('filename')
     filepath = os.path.join(DOWNLOAD_DIR, filename)
@@ -56,7 +54,6 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("يرجى إرسال رابط يوتيوب صحيح.")
         return
 
-    # حفظ الرابط في بيانات الجلسة للمستخدم
     context.user_data['current_url'] = url
     is_playlist = "list=" in url
 
@@ -108,11 +105,17 @@ async def process_download(message, context: ContextTypes.DEFAULT_TYPE, fmt_type
     url = context.user_data.get('current_url')
     items = context.user_data.get('playlist_items')
     
-    status_msg = await message.reply_text("⏳ جاري سحب البيانات وبدء المعالجة...")
+    status_msg = await message.reply_text("⏳ جاري سحب البيانات ومعالجة الفيديو...")
 
     ydl_opts = {
         'outtmpl': f'{DOWNLOAD_DIR}/%(title).100s.%(ext)s',
         'noplaylist': items == "1" or items is None,
+        # انتحال هوية تطبيقات الهواتف لتخطي حظر خوادم Render
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['ios', 'android']
+            }
+        },
     }
 
     if items and items not in ["1", "all"]:
@@ -148,7 +151,6 @@ async def process_download(message, context: ContextTypes.DEFAULT_TYPE, fmt_type
             file_size_mb = os.path.getsize(filename) / (1024 * 1024)
             title = entry.get('title', 'فيديو')
 
-            # فحص الحجم بالنسبة لحد تليجرام (50 ميجا)
             if file_size_mb <= 50:
                 await status_msg.edit_text(f"📤 جاري إرسال: {title} ({file_size_mb:.1f} MB)...")
                 with open(filename, 'rb') as f:
@@ -162,7 +164,7 @@ async def process_download(message, context: ContextTypes.DEFAULT_TYPE, fmt_type
                 download_link = f"{BASE_URL}/download/{encoded_name}"
                 await message.reply_text(
                     f"⚠️ **حجم الملف كبير ({file_size_mb:.1f} MB)** وتجاوز حد الـ 50MB الخاص بتليجرام.\n\n"
-                    f"📥 **رابط التحميل المباشر والسريع من السيرفر:**\n{download_link}\n\n"
+                    f"📥 **رابط التحميل المباشر من السيرفر:**\n{download_link}\n\n"
                     f"*(الرابط متاح لمدة 30 دقيقة قبل الحذف التلقائي لتوفير المساحة)*",
                     parse_mode="Markdown"
                 )
@@ -192,4 +194,4 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-  
+                
